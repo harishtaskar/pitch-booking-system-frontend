@@ -1,3 +1,4 @@
+import { Badge } from "@mantine/core";
 import { useEffect, useState } from "react";
 
 interface Props {
@@ -25,9 +26,10 @@ export default function CountdownTimer({ expiresAt, onExpire }: Props) {
 
   const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
   const ss = String(remaining % 60).padStart(2, "0");
+
   return (
-    <span className="font-mono text-sm font-semibold text-amber-700">
-      {mm}:{ss}
-    </span>
+    <Badge color={remaining <= 30 ? "red" : "yellow"} variant="filled" radius="sm">
+      ⏳ {mm}:{ss}
+    </Badge>
   );
 }

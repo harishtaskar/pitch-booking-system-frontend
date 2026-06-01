@@ -1,83 +1,76 @@
+import { Badge, Button, Card, Group, Text } from "@mantine/core";
+import { formatTime } from "../lib/time";
 import { SlotAvailability } from "../lib/types";
-import CountdownTimer from "./CountdownTimer";
 
 interface Props {
   slot: SlotAvailability;
-  isMine: boolean; // reserved by the current user (pending confirmation)
-  expiresAt: number | null;
-  busy: boolean;
-  onReserve: (slot: SlotAvailability) => void;
-  onConfirm: (slot: SlotAvailability) => void;
-  onExpire: () => void;
+  expired: boolean; // client-side safeguard
+  busy: boolean; // this slot is currently being reserved
+  onBook: (slot: SlotAvailability) => void;
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  available: "border-emerald-200 bg-emerald-50",
-  reserved: "border-amber-200 bg-amber-50",
-  booked: "border-slate-200 bg-slate-100 opacity-70",
+type Display = {
+  label: string;
+  color: string;
+  border: string;
+  bg: string;
 };
 
-export default function SlotCard({
-  slot,
-  isMine,
-  expiresAt,
-  busy,
-  onReserve,
-  onConfirm,
-  onExpire,
-}: Props) {
-  const label = `${slot.startTime} – ${slot.endTime}`;
+const DISPLAY: Record<string, Display> = {
+  available: { label: "Available", color: "teal", border: "var(--mantine-color-teal-3)", bg: "var(--mantine-color-teal-0)" },
+  reserved: { label: "Reserved", color: "yellow", border: "var(--mantine-color-yellow-3)", bg: "var(--mantine-color-yellow-0)" },
+  booked: { label: "Booked", color: "gray", border: "var(--mantine-color-gray-3)", bg: "var(--mantine-color-gray-1)" },
+  expired: { label: "Expired", color: "gray", border: "var(--mantine-color-gray-2)", bg: "var(--mantine-color-gray-0)" },
+};
 
-  // The slot I'm holding: show confirm + live countdown.
-  if (isMine && expiresAt) {
-    return (
-      <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-        <div className="flex items-center justify-between">
-          <span className="font-medium">{label}</span>
-          <CountdownTimer expiresAt={expiresAt} onExpire={onExpire} />
-        </div>
-        <button
-          disabled={busy}
-          onClick={() => onConfirm(slot)}
-          className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-        >
-          {busy ? "Confirming…" : "Confirm booking"}
-        </button>
-      </div>
-    );
-  }
+export default function SlotCard({ slot, expired, busy, onBook }: Props) {
+  const status = expired ? "expired" : slot.status;
+  const d = DISPLAY[status];
+  const isAvailable = status === "available";
+  const dimmed = status === "booked" || status === "expired";
 
-  if (slot.status === "booked") {
-    return (
-      <div className={`rounded-lg border p-3 ${STATUS_STYLES.booked}`}>
-        <div className="flex items-center justify-between">
-          <span className="font-medium">{label}</span>
-          <span className="text-xs font-semibold uppercase text-slate-500">Booked</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (slot.status === "reserved") {
-    return (
-      <div className={`rounded-lg border p-3 ${STATUS_STYLES.reserved}`}>
-        <div className="flex items-center justify-between">
-          <span className="font-medium">{label}</span>
-          <span className="text-xs font-semibold uppercase text-amber-600">Reserved</span>
-        </div>
-      </div>
-    );
-  }
-
-  // available
   return (
-    <button
-      disabled={busy}
-      onClick={() => onReserve(slot)}
-      className={`flex items-center justify-between rounded-lg border p-3 text-left transition hover:bg-emerald-100 disabled:opacity-50 ${STATUS_STYLES.available}`}
+    <Card
+      withBorder
+      radius="md"
+      padding="md"
+      style={{
+        borderColor: d.border,
+        backgroundColor: d.bg,
+        opacity: dimmed ? 0.7 : 1,
+        transition: "transform 120ms ease, box-shadow 120ms ease",
+      }}
+      className={isAvailable ? "hover:-translate-y-0.5 hover:shadow-md" : undefined}
     >
-      <span className="font-medium">{label}</span>
-      <span className="text-xs font-semibold uppercase text-emerald-600">Available</span>
-    </button>
+      <Group justify="space-between" align="center" wrap="nowrap">
+        <Text fw={600}>
+          {formatTime(slot.startTime)} – {formatTime(slot.endTime)}
+        </Text>
+        <Badge color={d.color} variant={isAvailable ? "light" : "filled"} radius="sm">
+          {d.label}
+        </Badge>
+      </Group>
+
+      {isAvailable ? (
+        <Button
+          mt="sm"
+          size="xs"
+          color="teal"
+          fullWidth
+          loading={busy}
+          onClick={() => onBook(slot)}
+        >
+          Book slot
+        </Button>
+      ) : (
+        <Text mt="sm" size="xs" c="dimmed">
+          {status === "reserved"
+            ? "Held by another user"
+            : status === "booked"
+              ? "Already booked"
+              : "Time has passed"}
+        </Text>
+      )}
+    </Card>
   );
 }

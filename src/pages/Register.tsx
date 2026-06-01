@@ -1,6 +1,17 @@
+import {
+  Alert,
+  Anchor,
+  Button,
+  Card,
+  Center,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
 import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import PasswordInput from "../components/PasswordInput";
 import { useAuth } from "../context/AuthContext";
 import { apiError } from "../lib/api";
 
@@ -28,56 +39,49 @@ export default function Register() {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center p-4">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded-xl border bg-white p-6 shadow-sm"
-      >
-        <h1 className="text-xl font-bold">Create your account</h1>
-        {error && (
-          <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-        )}
-        <div>
-          <label className="mb-1 block text-sm font-medium">Name</label>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded border px-3 py-2"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Email</label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded border px-3 py-2"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Password</label>
-          <PasswordInput
-            required
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <button
-          disabled={loading}
-          className="w-full rounded bg-emerald-600 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-        >
-          {loading ? "Creating…" : "Register"}
-        </button>
-        <p className="text-center text-sm text-slate-600">
-          Already have an account?{" "}
-          <Link to="/login" className="font-medium text-emerald-700">
-            Sign in
-          </Link>
-        </p>
-      </form>
-    </div>
+    <Center mih="100vh" bg="gray.0" p="md">
+      <Card withBorder shadow="sm" radius="lg" p="xl" w="100%" maw={400}>
+        <form onSubmit={handleSubmit}>
+          <Stack>
+            <Title order={2}>Create your account</Title>
+            {error && (
+              <Alert color="red" variant="light">
+                {error}
+              </Alert>
+            )}
+            <TextInput
+              label="Name"
+              required
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+            />
+            <TextInput
+              label="Email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.currentTarget.value)}
+            />
+            <PasswordInput
+              label="Password"
+              required
+              minLength={6}
+              description="At least 6 characters"
+              value={password}
+              onChange={(e) => setPassword(e.currentTarget.value)}
+            />
+            <Button type="submit" loading={loading} color="teal" fullWidth>
+              Register
+            </Button>
+            <Text size="sm" ta="center" c="dimmed">
+              Already have an account?{" "}
+              <Anchor component={Link} to="/login" c="teal">
+                Sign in
+              </Anchor>
+            </Text>
+          </Stack>
+        </form>
+      </Card>
+    </Center>
   );
 }

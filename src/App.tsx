@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import Navbar from "./components/Navbar";
+import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useAuth } from "./context/AuthContext";
 import Calendar from "./pages/Calendar";
@@ -8,12 +8,11 @@ import MyBookings from "./pages/MyBookings";
 import Pitches from "./pages/Pitches";
 import Register from "./pages/Register";
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Protected({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-full">
-      <Navbar />
-      <main>{children}</main>
-    </div>
+    <ProtectedRoute>
+      <Layout>{children}</Layout>
+    </ProtectedRoute>
   );
 }
 
@@ -22,44 +21,11 @@ export default function App() {
 
   return (
     <Routes>
-      <Route
-        path="/login"
-        element={token ? <Navigate to="/" replace /> : <Login />}
-      />
-      <Route
-        path="/register"
-        element={token ? <Navigate to="/" replace /> : <Register />}
-      />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Shell>
-              <Pitches />
-            </Shell>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/pitches/:pitchId"
-        element={
-          <ProtectedRoute>
-            <Shell>
-              <Calendar />
-            </Shell>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/my-bookings"
-        element={
-          <ProtectedRoute>
-            <Shell>
-              <MyBookings />
-            </Shell>
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/login" element={token ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/register" element={token ? <Navigate to="/" replace /> : <Register />} />
+      <Route path="/" element={<Protected><Pitches /></Protected>} />
+      <Route path="/pitches/:pitchId" element={<Protected><Calendar /></Protected>} />
+      <Route path="/my-bookings" element={<Protected><MyBookings /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
