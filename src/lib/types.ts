@@ -36,8 +36,13 @@ export interface Booking {
   bookingDate: string;
   status: "CONFIRMED" | "CANCELLED";
   createdAt: string;
-  pitch?: { id: string; name: string; location: string };
+  pitch?: { id: string; name: string; location: string; pricePerHour?: number };
   slot?: { id: string; startTime: string; endTime: string };
+}
+
+export interface MyBookingsResponse {
+  upcomingBookings: Booking[];
+  bookingHistory: Booking[];
 }
 
 export interface SlotEventPayload {

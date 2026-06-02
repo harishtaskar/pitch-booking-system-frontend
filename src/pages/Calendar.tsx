@@ -2,7 +2,6 @@ import {
   Badge,
   Button,
   Group,
-  Modal,
   SegmentedControl,
   Select,
   SimpleGrid,
@@ -12,31 +11,22 @@ import {
   Title,
 } from "@mantine/core";
 import { DatePickerInput } from "@mantine/dates";
-import { useDisclosure } from "@mantine/hooks";
-import { notifications } from "@mantine/notifications";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import CountdownTimer from "../components/CountdownTimer";
 import SlotCard from "../components/SlotCard";
-import { api, apiError } from "../lib/api";
+import { api } from "../lib/api";
 import { getSocket, joinRoom, leaveRoom } from "../lib/socket";
 import {
   addDays,
   browserTimeZone,
   formatDateLong,
-  formatTime,
   isSlotExpired,
   todayLocal,
 } from "../lib/time";
 import { AvailabilityResponse, Pitch, SlotAvailability, SlotEventPayload } from "../lib/types";
 
 type Filter = "all" | "available" | "booked";
-
-interface ActiveReservation {
-  slot: SlotAvailability;
-  expiresAt: number;
-}
 
 export default function Calendar() {
   const { pitchId = "" } = useParams();
@@ -46,10 +36,6 @@ export default function Calendar() {
   const [date, setDate] = useState<string>(todayLocal());
   const [slots, setSlots] = useState<SlotAvailability[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
-  const [busySlot, setBusySlot] = useState<string | null>(null);
-  const [active, setActive] = useState<ActiveReservation | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [modalOpened, modal] = useDisclosure(false);
 
   const pitchesQuery = useQuery({
     queryKey: ["pitches"],
@@ -60,11 +46,7 @@ export default function Calendar() {
   const availabilityQuery = useQuery({
     queryKey: ["slots", pitchId, date, tz],
     queryFn: async () =>
-      (
-        await api.get<AvailabilityResponse>("/slots", {
-          params: { pitchId, date, tz },
-        })
-      ).data,
+      (await api.get<AvailabilityResponse>("/slots", { params: { pitchId, date, tz } })).data,
   });
 
   useEffect(() => {
@@ -72,14 +54,6 @@ export default function Calendar() {
   }, [availabilityQuery.data]);
 
   // Live updates: join the room and patch slot statuses on socket events.
-  const activeRef = useRef<ActiveReservation | null>(null);
-  activeRef.current = active;
-
-  // When the modal closes after a confirm/expiry we must NOT release the hold
-  // (it's already booked or already gone); this flag distinguishes those from
-  // a user-initiated cancel/close, where we DO release the hold instantly.
-  const skipReleaseRef = useRef(false);
-
   useEffect(() => {
     if (!pitchId || !date) return;
     const socket = getSocket();
@@ -87,10 +61,7 @@ export default function Calendar() {
 
     const patch = (p: SlotEventPayload) => {
       if (p.pitchId !== pitchId || p.date !== date) return;
-      if (p.status === "reserved" && activeRef.current?.slot.id === p.slotId) return;
-      setSlots((prev) =>
-        prev.map((s) => (s.id === p.slotId ? { ...s, status: p.status } : s))
-      );
+      setSlots((prev) => prev.map((s) => (s.id === p.slotId ? { ...s, status: p.status } : s)));
     };
 
     socket.on("slot:reserved", patch);
@@ -104,92 +75,12 @@ export default function Calendar() {
     };
   }, [pitchId, date]);
 
-  const handleBook = useCallback(
-    async (slot: SlotAvailability) => {
-      setBusySlot(slot.id);
-      try {
-        const { data } = await api.post("/reserve-slot", {
-          pitchId,
-          slotId: slot.id,
-          date,
-          tz,
-        });
-        setActive({ slot, expiresAt: Date.now() + data.expiresInSeconds * 1000 });
-        setSlots((prev) =>
-          prev.map((s) => (s.id === slot.id ? { ...s, status: "reserved" } : s))
-        );
-        modal.open();
-      } catch (err) {
-        notifications.show({ color: "red", title: "Could not reserve", message: apiError(err) });
-        availabilityQuery.refetch();
-      } finally {
-        setBusySlot(null);
-      }
-    },
-    [pitchId, date, tz, modal, availabilityQuery]
-  );
+  // Selecting a slot takes the user to the dedicated confirmation page, which
+  // places the 2-minute hold on the backend.
+  const handleBook = (slot: SlotAvailability) =>
+    navigate(`/booking/confirm?pitchId=${pitchId}&slotId=${slot.id}&date=${date}`);
 
-  const handleConfirm = useCallback(async () => {
-    if (!active) return;
-    setConfirming(true);
-    try {
-      await api.post("/confirm-booking", {
-        pitchId,
-        slotId: active.slot.id,
-        date,
-        tz,
-      });
-      setSlots((prev) =>
-        prev.map((s) => (s.id === active.slot.id ? { ...s, status: "booked" } : s))
-      );
-      notifications.show({
-        color: "teal",
-        title: "Booking confirmed 🎉",
-        message: `${pitch?.name} · ${formatTime(active.slot.startTime)}–${formatTime(active.slot.endTime)}`,
-      });
-      skipReleaseRef.current = true; // already booked, don't release
-      modal.close();
-      setActive(null);
-    } catch (err) {
-      notifications.show({ color: "red", title: "Could not confirm", message: apiError(err) });
-      skipReleaseRef.current = true;
-      modal.close();
-      setActive(null);
-      availabilityQuery.refetch();
-    } finally {
-      setConfirming(false);
-    }
-  }, [active, pitchId, date, tz, pitch, modal, availabilityQuery]);
-
-  const handleExpire = useCallback(() => {
-    notifications.show({
-      color: "yellow",
-      title: "Reservation expired",
-      message: "The 2-minute hold elapsed and the slot was released.",
-    });
-    skipReleaseRef.current = true; // server already released it via TTL
-    modal.close();
-    setActive(null);
-    availabilityQuery.refetch();
-  }, [modal, availabilityQuery]);
-
-  // User-initiated close/cancel: release the hold immediately so the slot frees
-  // up at once for everyone, instead of waiting out the 2-minute TTL.
-  const handleModalClose = useCallback(() => {
-    const a = activeRef.current;
-    if (skipReleaseRef.current) {
-      skipReleaseRef.current = false;
-    } else if (a) {
-      setSlots((prev) =>
-        prev.map((s) => (s.id === a.slot.id ? { ...s, status: "available" } : s))
-      );
-      api.post("/release-slot", { pitchId, slotId: a.slot.id, date }).catch(() => undefined);
-    }
-    setActive(null);
-    modal.close();
-  }, [pitchId, date, modal]);
-
-  // Apply client-side expiry safeguard + status filter.
+  // Client-side expiry safeguard + status filter.
   const visibleSlots = useMemo(() => {
     return slots
       .map((s) => ({ slot: s, expired: isSlotExpired(date, s.startTime) }))
@@ -287,73 +178,10 @@ export default function Calendar() {
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
           {visibleSlots.map(({ slot, expired }) => (
-            <SlotCard
-              key={slot.id}
-              slot={slot}
-              expired={expired}
-              busy={busySlot === slot.id}
-              onBook={handleBook}
-            />
+            <SlotCard key={slot.id} slot={slot} expired={expired} busy={false} onBook={handleBook} />
           ))}
         </SimpleGrid>
       )}
-
-      <Modal
-        opened={modalOpened}
-        onClose={handleModalClose}
-        title={<Title fz={22} fw={600} order={3}>Confirm your booking</Title>}
-        centered
-        size="lg"
-        radius="lg"
-        padding="xl"
-      >
-        {active && (
-          <Stack gap="md">
-            <Group justify="space-between">
-              <Text c="dimmed" size="lg">
-                Pitch
-              </Text>
-              <Text fw={700} size="lg">
-                {pitch?.name}
-              </Text>
-            </Group>
-            <Group justify="space-between">
-              <Text c="dimmed" size="lg">
-                Date
-              </Text>
-              <Text fw={700} size="lg">
-                {formatDateLong(date)}
-              </Text>
-            </Group>
-            <Group justify="space-between">
-              <Text c="dimmed" size="lg">
-                Time
-              </Text>
-              <Text fw={700} size="lg">
-                {formatTime(active.slot.startTime)} – {formatTime(active.slot.endTime)}
-              </Text>
-            </Group>
-            <Group justify="space-between">
-              <Text c="dimmed" size="lg">
-                Hold expires in
-              </Text>
-              <CountdownTimer expiresAt={active.expiresAt} onExpire={handleExpire} />
-            </Group>
-            <Text size="sm" c="dimmed">
-              Your slot is held for 2 minutes. Confirm before the timer runs out — closing
-              this dialog releases the slot immediately.
-            </Text>
-            <Group justify="flex-end" mt="sm">
-              <Button variant="light" size="md" onClick={handleModalClose}>
-                Cancel
-              </Button>
-              <Button variant="filled" color="teal" size="md" loading={confirming} onClick={handleConfirm}>
-                Confirm booking
-              </Button>
-            </Group>
-          </Stack>
-        )}
-      </Modal>
 
       <Button variant="subtle" color="gray" size="xs" w="fit-content" onClick={() => navigate("/")}>
         ← Back to pitches
